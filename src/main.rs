@@ -49,26 +49,25 @@ pub enum EncodingTypes {
     Windows1252, utf8
 }
 fn main() {
+    dbg!(std::env::args());
     let mut app = App::new("Atomhid Builder")
         .about("Builds code from templates using csv and template files, and an additional multiplier file.")
         .author("Daniel Alexander Apatiga <daniel.apatiga@eleventh-hour.club>")
         .version("1.0.0")
         .arg(Arg::new("token")
-            .value_name("token")
             .short('k')
             .about("Set the token value inside a template txt file.  A parser will look for these tokens, which will have a numeric value corresponding to the column number in the csv file like so: <token><number>.  E.g., ???1")
             .long("token")
-            .required(true)
+            .default_missing_value("???")
+            .required(false)
             .takes_value(true))
         .arg(Arg::new("csv_input_fname")
             .short('f')
-            .value_name("csv_input_fname")
             .long("csv-input-fname")
             .required(false)
             .takes_value(true))
         .arg(Arg::new("output_fname")
             .short('o')
-            .value_name("output_fname")
             .long("output-fname")
             .required(true)
             .takes_value(true))
@@ -86,7 +85,6 @@ fn main() {
             .takes_value(true))
         .arg(Arg::new("input_fname")
             .short('i')
-            .value_name("input_fname")
             .long("input_fname")
             .required(true)
             .takes_value(true))
@@ -110,14 +108,15 @@ fn main() {
             .takes_value(true))
         .arg(Arg::new("append_str")
             .short('a')
-            .long("append-str")
+            .long("append")
             .required(false)
+            .about("Append one file unto another file.")
             .default_missing_value("false"))
         .arg(Arg::new("templ_fname")
             .value_name("templ_fname")
             .short('t')
             .long("template-fname")
-            .required(true)
+            .required(false)
             .takes_value(true))
         .arg(Arg::new("i_encoding")
             .short('d')
@@ -173,6 +172,7 @@ fn main() {
              .required(false)
              .takes_value(true))
         .arg(Arg::new("list_funcs")
+            .short('u')
             .long("list-functions")
             .required(false)
             .about("This enables the listing of functions generated as a post script building step.")
@@ -181,11 +181,14 @@ fn main() {
         .arg(Arg::new("re_mappings")
             .long("builder-re-mappings")
             .required(false)
-            .short('a')
+            .short('p')
             .takes_value(true));
 
     let matches = app.get_matches();
-    let listfuncs: bool = matches.value_of("list_funcs").unwrap_or("false").parse::<bool>().unwrap();
+    let mut listfuncs = false;
+    if matches.occurrences_of("list_funcs") > 0 {
+        listfuncs = true;
+    }
     let input_file_name = matches.value_of("input_fname").expect("Missing input filename.");
     let csv_input_file_name = matches.value_of("csv_input_fname").unwrap_or_default();
     let tolken = matches.value_of("token").unwrap_or("???");
@@ -195,34 +198,49 @@ fn main() {
     let csv_delimitter_row = matches.value_of("csv_col_delim").unwrap_or(",");
     let csv_delimitter_col = matches.value_of("csv_row_delim").unwrap_or("\n");
     let delimitter_bigger_row = matches.value_of("big_row_delim").unwrap_or(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+");
-    let appendStr = matches.value_of("append_str").unwrap_or("false").parse::<bool>().unwrap();
+    let mut append = false;
+    if matches.occurrences_of("append_str") > 0 {
+        append = true;
+    }
     let template_file_name = matches.value_of("templ_fname").unwrap_or("");
-    let verbose = matches.value_of("verbose").unwrap_or("false").parse::<bool>().unwrap();
+    let mut verbose = false;
+    if matches.occurrences_of("verbose") > 0 {
+        verbose = true;
+    }
     let i_encoding = matches.value_of("i_encoding").unwrap_or("utf8");
     let csvi_encoding = matches.value_of("csvi_encoding").unwrap_or("utf8");
     let o_encoding = matches.value_of("o_encoding").unwrap_or("utf8");
     let t_encoding = matches.value_of("t_encoding").unwrap_or("utf8");
-    let trim_new_lines = matches.value_of("trim_new_lines").unwrap_or("false").parse::<bool>().unwrap();
-    let build_by_re = matches.value_of("build_by_re").unwrap_or("false").parse::<bool>().unwrap();
-    let is_struct = matches.value_of("is_struct").unwrap_or("false").parse::<bool>().unwrap();
+    let mut trim_new_lines = false;
+    if matches.occurrences_of("trim_new_lines") > 0 {
+        trim_new_lines = true;
+    }
+    let mut build_by_re = false;
+    if matches.occurrences_of("build_by_re") > 0 {
+        build_by_re = true;
+    }
+    let mut is_struct = false;
+    if matches.occurrences_of("is_struct") > 0 {
+        is_struct = true;
+    }
     let col_1_index = matches.value_of("col_1_ind").unwrap_or("1").parse::<usize>().unwrap();
     let col_2_index = matches.value_of("col_2_ind").unwrap_or("2").parse::<usize>().unwrap();
     let builder_re_mappings = matches.value_of("re_mappings").unwrap_or("-1").parse::<i16>().unwrap();
+   //dbg!(input_file_name, output_file_name, template_file_name, append)     ;
     if verbose {
         println!(
             "<Input file: {}, output file: {}, template file: {}>",
             input_file_name, output_file_name, template_file_name
         );
     }
-    if appendStr {
+    if append {
         let input_bytes = read_file(input_file_name, i_encoding).unwrap();
         write_file(
             output_file_name,
             &mut String::from_utf8(input_bytes).expect("Found invalid UTF-8"),
             i_encoding
         );
-    }
-    if build_by_re {
+    } else if build_by_re {
         let input_bytes = read_file(input_file_name, i_encoding).unwrap();
         let input_text = String::from_utf8(input_bytes).expect("Found invalid UTF-8");
         let template_bytes = read_file(template_file_name, t_encoding).unwrap();
