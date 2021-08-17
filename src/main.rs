@@ -49,7 +49,6 @@ pub enum EncodingTypes {
     Windows1252, utf8
 }
 fn main() {
-    dbg!(std::env::args());
     let mut app = App::new("Atomhid Builder")
         .about("Builds code from templates using csv and template files, and an additional multiplier file.")
         .author("Daniel Alexander Apatiga <daniel.apatiga@eleventh-hour.club>")
