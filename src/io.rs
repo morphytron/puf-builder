@@ -7,7 +7,6 @@ pub mod io {
     use std::io;
     use std::io::prelude::*;
     use std::io::BufReader;
-    use crate::EncodingTypes;
     fn get_encoding<'a>(encoding : &str) -> Option<&'a Encoding> {
         match encoding {
             "WINDOWS_1252" => {
