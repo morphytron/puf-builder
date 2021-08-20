@@ -82,7 +82,7 @@ fn main() {
                 .value_name("templ_fname")
                 .short('t')
                 .long("template-fname")
-                .required(false)
+                .required(true)
                 .takes_value(true))
             .arg(Arg::new("i_encoding")
                 .short('d')
@@ -139,6 +139,13 @@ fn main() {
                 .long("o-encoding")
                 .required(false)
                 .takes_value(true))
+            .arg(Arg::new("verbose")
+                .short('v')
+                .long("verbose")
+                .about("Turn on verbose output.")
+                .required(false)
+                .default_missing_value("false")
+                .takes_value(false))
 
         )
         .subcommand(App::new("buildre")
@@ -159,12 +166,13 @@ fn main() {
             .arg(Arg::new("csv_input_fname")
                 .short('f')
                 .long("csv-input-fname")
-                .required(false)
+                .required(true)
                 .takes_value(true))
             .arg(Arg::new("output_fname")
                 .short('o')
                 .long("output-fname")
-                .required(true)
+                .about("Specify the output filename path/filename.ext.  Leave blank to output result into console.")
+                .required(false)
                 .takes_value(true))
             .arg(Arg::new("col_delim")
                 .short('c')
@@ -205,7 +213,7 @@ fn main() {
                 .value_name("templ_fname")
                 .short('t')
                 .long("template-fname")
-                .required(false)
+                .required(true)
                 .takes_value(true))
             .arg(Arg::new("i_encoding")
                 .short('d')
@@ -274,6 +282,13 @@ fn main() {
                 .long("input_fname")
                 .required(true)
                 .takes_value(true))
+            .arg(Arg::new("verbose")
+                .short('v')
+                .long("verbose")
+                .about("Turn on verbose output.")
+                .required(false)
+                .default_missing_value("false")
+                .takes_value(false))
     );
 
     let mut app_matches = app.get_matches();
@@ -288,13 +303,12 @@ fn main() {
         let input_file_name = matches.value_of("input_fname").expect("Missing input filename.");
         let csv_input_file_name = matches.value_of("csv_input_fname").unwrap_or_default();
         let tolken = matches.value_of("token").unwrap_or("???");
-        let output_file_name = matches.value_of("output_fname").expect("Missing output filename.");
+        let output_file_name = matches.value_of("output_fname").unwrap_or("");
         let delimitter_col = matches.value_of("col_delim").unwrap_or(",");
         let delimitter_row = matches.value_of("row_delim").unwrap_or("\n");
         let csv_delimitter_row = matches.value_of("csv_col_delim").unwrap_or(",");
         let csv_delimitter_col = matches.value_of("csv_row_delim").unwrap_or("\n");
         let delimitter_bigger_row = matches.value_of("big_row_delim").unwrap_or(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+");
-        let mut append = false;
         let template_file_name = matches.value_of("templ_fname").unwrap_or("");
         let mut verbose = false;
         if matches.occurrences_of("verbose") > 0 {
@@ -308,7 +322,6 @@ fn main() {
         if matches.occurrences_of("trim_new_lines") > 0 {
             trim_new_lines = true;
         }
-        let mut build_by_re = false;
         let mut is_struct = false;
         if matches.occurrences_of("is_struct") > 0 {
             is_struct = true;
