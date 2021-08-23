@@ -8,7 +8,7 @@ pub mod builder {
         entry: &String,
         template: String,
         col_del: &str,
-        tolken: &str,
+        token: &str,
         trim_endlines: bool,
     ) -> String {
         let mut cols = entry.split(col_del);
@@ -16,16 +16,16 @@ pub mod builder {
         let mut index = 1;
         let mut clone = template.clone();
         for mut col in cols {
-            let mut tolken_replacement = format!("{0}{1}", tolken.to_string(), index.to_string());
+            let mut token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
             if trim_endlines {
-                let col_size = tolken_replacement.len();
-                tolken_replacement = tolken_replacement
+                let col_size = token_replacement.len();
+                token_replacement = token_replacement
                     .as_str()
                     .trim_right_matches("\r")
                     .to_string();
-                tolken_replacement = tolken_replacement.trim_right_matches("\n").to_string();
+                token_replacement = token_replacement.trim_right_matches("\n").to_string();
             }
-            clone = clone.replace(&tolken_replacement, col);
+            clone = clone.replace(&token_replacement, col);
             //println!("{}",clone);
             index += 1;
         }
@@ -37,10 +37,9 @@ pub mod builder {
         template: String,
         col_del: &str,
         row_del: &str,
-        tolken: &str,
+        token: &str,
         trim_endlines: bool,
     ) -> String {
-        let mut mut_input = input;
         let mut builder = Builder::default();
         let mut rows = input.as_str().split(row_del);
         for row in rows {
@@ -49,31 +48,30 @@ pub mod builder {
             let mut index = 1;
             let mut clone = template.clone();
             for mut col in cols {
-                let mut tolken_replacement =
-                    format!("{0}{1}", tolken.to_string(), index.to_string());
+                let mut token_replacement =
+                    format!("{0}{1}", token.to_string(), index.to_string());
                 if trim_endlines {
-                    let col_size = tolken_replacement.len();
-                    tolken_replacement = tolken_replacement
+                    let col_size = token_replacement.len();
+                    token_replacement = token_replacement
                         .as_str()
-                        .trim_right_matches("\r")
+                        .trim_end_matches("\r")
                         .to_string();
-                    tolken_replacement = tolken_replacement.trim_right_matches("\n").to_string();
+                    token_replacement = token_replacement.trim_end_matches("\n").to_string();
                 }
-                clone = clone.replace(&tolken_replacement, col);
+                clone = clone.replace(&token_replacement, col);
                 //println!("{}",clone);
                 index += 1;
             }
             builder.append(clone);
         }
-        let s = builder.string().unwrap();
-        s
+        builder.string().unwrap()
     }
 
     pub fn split_input_into_row_set(
         input: &str,
         csv_row_del: &str,
         csv_col_del: &str,
-        tolken: &str,
+        token: &str,
         trim_endlines: bool,
         regexable_input: &str,
         ind_1: usize,
@@ -86,6 +84,12 @@ pub mod builder {
         is_verbose: bool,
         builder_re_mapping: i16,
     ) -> Builder {
+        if is_verbose {
+            println!(
+                "Csv column delimiter is {}. Builder re mapping is {}",
+                csv_col_del, builder_re_mapping
+            );
+        }
         let mut final_string = Builder::default();
         let mut row_reg = Regex::new(row_regex_str).unwrap();
         let mut index_1 = ind_1;
@@ -99,8 +103,6 @@ pub mod builder {
             index_2 = 2usize;
         }
         let mut rows: Vec<_> = row_reg.find_iter(regexable_input).collect();
-        let mut rows_clone: Vec<_> = row_reg.find_iter(regexable_input).collect();
-        //let mut sections : Vec<&str> = Vec::new();
         let row_size = rows.len();
         if is_struct && row_size == 0 {
             panic!("No pub structs found.");
@@ -110,10 +112,6 @@ pub mod builder {
         for row in rows {
             let mut modified_template = String::new();
             template.clone_into(&mut modified_template);
-            //sections.push(row);
-            if is_verbose {
-                println!("Input row is: {}\n", row.as_str());
-            }
             let (field_names, field_types) = retrieve_2_col_lists_from_rows_within_row(
                 row.as_str(),
                 split_row_by,
@@ -133,12 +131,6 @@ pub mod builder {
             if size != type_s {
                 panic!("Field-types-array size does not match field-names-array size.");
             }
-            if is_verbose {
-                println!(
-                    "Csv col del is {}. Builder re mapping is {}",
-                    csv_col_del, builder_re_mapping
-                );
-            }
             let mut csv_row_indices: Vec<usize> = vec![other_index];
             if builder_re_mapping != -1 {
                 csv_row_indices = retrieve_csv_row_indices_by_col_mapping_and_row(
@@ -148,6 +140,9 @@ pub mod builder {
                     csv_col_del,
                     is_verbose,
                 );
+            }
+            if is_verbose {
+                println!("Indices length: {}", csv_row_indices.len());
             }
             if is_verbose {
                 println!(
@@ -166,13 +161,21 @@ pub mod builder {
                         is_struct,
                         i == size - 1,
                     );
-                    modified_template = buildOutputFromEntry(
+                    if is_verbose {
+                        print!("{}\r", modified_template);
+                    }
+                   //dbg!(&row);
+                    modified_template = buildOutput(
                         &csv_rows[index].to_string(),
-                        modified_template.to_string(),
+                        template.to_string(),
                         csv_col_del,
-                        tolken,
-                        trim_endlines,
+                        csv_row_del,
+                        token,
+                        trim_endlines
                     );
+                    if is_verbose {
+                        print!("{}\r", modified_template);
+                    }
                 }
                 final_string.append(format!("{}\n", modified_template));
             }
@@ -190,21 +193,22 @@ pub mod builder {
     ) -> Vec<usize> {
         let mut indices = Vec::new();
         let mut val = 0;
+        if is_verbose {
+            println!("Csv rows are: {:?}\n", csv_rows);
+        }
         for csv_row in csv_rows {
             let cols = csv_row.split(col_del);
             let mut index = 0i16;
             'inner: for col in cols {
                 if index == csv_col_mapping {
-                    //if is_verbose {
-                    //    println!("Csv row: {}", csv_row);
-                    //    println!("Col: {}\n  ", col);
-                    //}
                     let mut builder = Builder::default();
                     builder.append(col);
                     let re = Regex::new(builder.string().unwrap().as_str()).unwrap();
                     match re.captures(input_row.as_str()) {
                         Some(success) => {
-                            println!("Matched input row to column.  {:?}", success);
+                            if is_verbose {
+                                //println!("Matched input row, {}, to column. {:?}", col, success);
+                            }
                             indices.push(val);
                             break 'inner;
                         }
@@ -244,9 +248,6 @@ pub mod builder {
                     }
                 })
                 .collect();
-            if is_verbose {
-                println!("Smaller row is {}, columns is {:?}", r.as_str(), columns);
-            }
             if columns.len() > 1 {
                 field_names.push(columns[index_1].as_str().to_string());
                 field_types.push(columns[index_2].as_str().to_string());
@@ -378,7 +379,6 @@ pub mod builder {
             builder.append(",");
         }
         let res = builder.string().unwrap();
-        //println!("{}", &res);
         res
     }
 }
