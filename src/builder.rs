@@ -17,20 +17,19 @@ pub mod builder {
     ) -> String {
         println!("In buildOutputFromEntry function.");
         //dbg!(entry, &template, col_del, token, trim_endlines);
-        let mut cols = entry.split(col_del);
-        let (size, optional_size) = cols.size_hint();
+        let mut cols : Vec<&str> = entry.split(col_del).collect();
+        //dbg!(&cols);
         let mut index = 1;
-        let mut clone = template.clone();
         for mut col in cols {
 
             let mut t = col;
             if trim_endlines {
                 return_on_col_pattern.replacen(col, 100, "").to_string();
             }
-            dbg!(col);
+            //dbg!(col);
             let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
             template = template.replacen(token_replacement.as_str(), col, 1000);
-            dbg!(&template);
+            //dbg!(&template);
             //println!("{}",clone);
             index += 1;
         }
@@ -113,17 +112,17 @@ pub mod builder {
         if row_size == 0 {
             panic!("No 'big' rows found.");
         }
+       // dbg!(&csv_row_del);
         let mut csv_rows: Vec<&str> = input.split(csv_row_del).collect();
+        //dbg!(&csv_rows);
         let mut input_row_index = 0;
         if !disable_assert_row_count && rows.len() != csv_rows.len() {
             panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -r flag.");
         }
         for row in rows {
-            let mut modified_template = String::new();
-            template.clone_into(&mut modified_template);
             let mut modified_template = buildOutputFromEntry(
                 &csv_rows[input_row_index].to_string(),
-                modified_template,
+                template.clone().to_string(),
                 csv_col_del,
                 token,
                 trim_endlines
