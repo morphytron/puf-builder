@@ -150,6 +150,12 @@ fn main() {
         )
         .subcommand(App::new("buildre")
             .about("This algorithm builds from two input files rather than just one.  Keeping the input csv file, you also specify another file from which you multiply its matrice of rows and columns with the rows and columns of the csv file.")
+            .arg(Arg::new("unsafe_row_count")
+                .long("disable-row-count-assert")
+                .default_missing_value("false")
+                .required(false)
+                .short('w')
+                .takes_value(false))
             .arg(Arg::new("re_mappings")
                 .long("builder-re-mappings")
                 .default_missing_value("-1")
@@ -161,11 +167,12 @@ fn main() {
                 .short('k')
                 .about("Set the token value inside a template txt file.  A parser will look for these tokens, which will have a numeric value corresponding to the column number in the csv file like so: <token><number>.  E.g., ???1")
                 .long("token")
+                .default_value("???")
                 .default_missing_value("???")
                 .required(false)
                 .takes_value(true))
             .arg(Arg::new("csv_input_fname")
-                .short('f')
+                .short('i')
                 .long("csv-input-fname")
                 .required(true)
                 .takes_value(true))
@@ -188,7 +195,7 @@ fn main() {
                 .default_missing_value("\n")
                 .takes_value(true))
             .arg(Arg::new("input_fname")
-                .short('i')
+                .short('f')
                 .long("input_fname")
                 .required(true)
                 .takes_value(true))
@@ -312,6 +319,10 @@ fn main() {
         let csv_delimitter_col = matches.value_of("csv_row_delim").unwrap_or("\n");
         let delimitter_bigger_row = matches.value_of("big_row_delim").unwrap_or(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+");
         let template_file_name = matches.value_of("templ_fname").unwrap_or("");
+        let mut disable_assert_row_count = false;
+        if matches.occurrences_of("unsafe_row_count") > 0 {
+            disable_assert_row_count = true;
+        }
         let mut verbose = false;
         if matches.occurrences_of("verbose") > 0 {
             verbose = true;
@@ -355,9 +366,9 @@ fn main() {
             let input_template_text =
                 String::from_utf8(input_template_bytes).expect("Found invalid UTF-8");
             if verbose {
-                dbg!(input_template_text.as_str(), csv_delimitter_row, csv_delimitter_col,token, trim_new_lines, input_text.as_str(), col_1_index, col_2_index, delimitter_bigger_row, delimitter_row, delimitter_col, is_struct, template_text.as_str(), verbose, builder_re_mappings);
+                dbg!(input_template_text.as_str(), csv_delimitter_row, csv_delimitter_col,token, trim_new_lines, input_text.as_str(), col_1_index, col_2_index, delimitter_bigger_row, delimitter_row, delimitter_col, is_struct, template_text.as_str(), verbose, builder_re_mappings, disable_assert_row_count);
             }
-            let mut output = split_input_into_row_set(
+            let mut output = start_buildre(
                 input_template_text.as_str(),
                 csv_delimitter_row,
                 csv_delimitter_col,
@@ -373,6 +384,7 @@ fn main() {
                 template_text.as_str(),
                 verbose,
                 builder_re_mappings,
+                disable_assert_row_count
             )
                 .string()
                 .unwrap();

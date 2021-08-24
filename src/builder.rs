@@ -3,33 +3,38 @@ pub mod builder {
     use crate::io::io::{read_file, write_file};
     use string_builder::Builder;
     use std::sync::{Mutex, MutexGuard};
+    use crate::lazy_static::lazy_static;
+    lazy_static!(
+        static ref return_on_col_pattern : Regex = Regex::new("[\r\n]*").unwrap();
+    );
 
     pub fn buildOutputFromEntry(
         entry: &String,
-        template: String,
+        mut template: String,
         col_del: &str,
         token: &str,
         trim_endlines: bool,
     ) -> String {
+        println!("In buildOutputFromEntry function.");
+        //dbg!(entry, &template, col_del, token, trim_endlines);
         let mut cols = entry.split(col_del);
         let (size, optional_size) = cols.size_hint();
         let mut index = 1;
         let mut clone = template.clone();
         for mut col in cols {
-            let mut token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
+
+            let mut t = col;
             if trim_endlines {
-                let col_size = token_replacement.len();
-                token_replacement = token_replacement
-                    .as_str()
-                    .trim_right_matches("\r")
-                    .to_string();
-                token_replacement = token_replacement.trim_right_matches("\n").to_string();
+                return_on_col_pattern.replacen(col, 100, "").to_string();
             }
-            clone = clone.replace(&token_replacement, col);
+            dbg!(col);
+            let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
+            template = template.replacen(token_replacement.as_str(), col, 1000);
+            dbg!(&template);
             //println!("{}",clone);
             index += 1;
         }
-        clone
+        template
     }
 
     pub fn buildOutput(
@@ -67,7 +72,7 @@ pub mod builder {
         builder.string().unwrap()
     }
 
-    pub fn split_input_into_row_set(
+    pub fn start_buildre(
         input: &str,
         csv_row_del: &str,
         csv_col_del: &str,
@@ -83,6 +88,7 @@ pub mod builder {
         template: &str,
         is_verbose: bool,
         builder_re_mapping: i16,
+        disable_assert_row_count: bool
     ) -> Builder {
         if is_verbose {
             println!(
@@ -104,15 +110,28 @@ pub mod builder {
         }
         let mut rows: Vec<_> = row_reg.find_iter(regexable_input).collect();
         let row_size = rows.len();
-        if is_struct && row_size == 0 {
-            panic!("No pub structs found.");
+        if row_size == 0 {
+            panic!("No 'big' rows found.");
         }
         let mut csv_rows: Vec<&str> = input.split(csv_row_del).collect();
-        let mut other_index = 0;
+        let mut input_row_index = 0;
+        if !disable_assert_row_count && rows.len() != csv_rows.len() {
+            panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -r flag.");
+        }
         for row in rows {
             let mut modified_template = String::new();
             template.clone_into(&mut modified_template);
-            let (field_names, field_types) = retrieve_2_col_lists_from_rows_within_row(
+            let mut modified_template = buildOutputFromEntry(
+                &csv_rows[input_row_index].to_string(),
+                modified_template,
+                csv_col_del,
+                token,
+                trim_endlines
+            );
+            if is_verbose {
+                print!("{}\r", modified_template);
+            }
+            let (col_ind_1_list, col_ind_2_list) = retrieve_2_col_lists_from_rows_within_row( //same thing as (field_names, field_types)
                 row.as_str(),
                 split_row_by,
                 split_col_by,
@@ -122,16 +141,16 @@ pub mod builder {
             );
             if is_verbose {
                 println!(
-                    "field_names: <{:?}>, field_types: <{:?}>",
-                    field_names, field_types
+                    "col_ind_1_list: <{:?}>, col_ind_2_list: <{:?}>",
+                    col_ind_1_list, col_ind_2_list
                 );
             }
-            let size = field_names.len();
-            let type_s = field_types.len();
-            if size != type_s {
-                panic!("Field-types-array size does not match field-names-array size.");
+            let col_1_size = col_ind_1_list.len();
+            let col_2_size = col_ind_2_list.len();
+            if col_1_size != col_2_size {
+                panic!("The number of columns in col index 1 should have the same count as the number of columns in col index 2.  Assertion failed!  These values are set with the --col-1-index and --col-2-index, which default to 0 and 1 respectively.");
             }
-            let mut csv_row_indices: Vec<usize> = vec![other_index];
+            /*let mut csv_row_indices: Vec<usize> = vec![other_index];
             if builder_re_mapping != -1 {
                 csv_row_indices = retrieve_csv_row_indices_by_col_mapping_and_row(
                     &csv_rows,
@@ -149,37 +168,25 @@ pub mod builder {
                     "Csv-row indices are {:?} with bigger row index: {}",
                     csv_row_indices, other_index
                 );
-            }
-            for index in csv_row_indices {
-                for i in 1..size {
-                    let col_1 = field_names[i].clone();
-                    let col_2 = field_types[i].clone();
-                    modified_template = modify_template_based_on_row(
-                        col_1,
-                        col_2,
-                        modified_template.as_str(),
-                        is_struct,
-                        i == size - 1,
-                    );
-                    if is_verbose {
-                        print!("{}\r", modified_template);
-                    }
-                   //dbg!(&row);
-                    modified_template = buildOutput(
-                        &csv_rows[index].to_string(),
-                        template.to_string(),
-                        csv_col_del,
-                        csv_row_del,
-                        token,
-                        trim_endlines
-                    );
-                    if is_verbose {
-                        print!("{}\r", modified_template);
-                    }
+            }*/
+            for i in 0..col_1_size {
+                let col_1 = col_ind_1_list[i].clone();
+                let col_2 = col_ind_2_list[i].clone();
+                modified_template = modify_template_based_on_row(
+                    col_1,
+                    col_2,
+                    modified_template.as_str(),
+                    is_struct,
+                    i == col_1_size - 1,
+                );
+                if is_verbose {
+                    print!("{}\r", modified_template);
                 }
-                final_string.append(format!("{}\n", modified_template));
             }
-            other_index += 1;
+
+           //dbg!(&row);
+            input_row_index += 1;
+            final_string.append(format!("{}\n", modified_template));
         }
         final_string
     }
