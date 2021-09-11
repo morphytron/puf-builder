@@ -156,6 +156,12 @@ fn main() {
                 .required(false)
                 .short('w')
                 .takes_value(false))
+            .arg(Arg::new("skip_cols")
+                .long("skip-cols")
+                .about("Skip the column index for each numeric value in this array, delineated by commas.  (Only works with the input file, not the csv input parameter.)")
+                .short('S')
+                .required(false)
+                .takes_value(true))
             .arg(Arg::new("re_mappings")
                 .long("builder-re-mappings")
                 .default_missing_value("-1")
@@ -367,6 +373,13 @@ fn main() {
                 i_encoding
             );
         } else if subcmd == "buildre" {
+            let skip_cols_str = matches.value_of("skip_cols").unwrap_or("");
+            let cols_to_skip_v : Vec<&str> = skip_cols_str.split(",").collect();
+            let mut cols_v : Vec<usize> = Vec::new();
+            for col in cols_to_skip_v {
+                let col_val : usize = col.parse::<usize>().unwrap();
+                cols_v.push(col_val);
+            }
             let builder_re_mappings = matches.value_of("re_mappings").unwrap_or("-1").parse::<i16>().unwrap();
             let input_bytes = read_file(input_file_name, i_encoding).unwrap();
             let input_text = String::from_utf8(input_bytes).expect("Found invalid UTF-8");
@@ -394,7 +407,8 @@ fn main() {
                 template_text.as_str(),
                 verbose,
                 builder_re_mappings,
-                disable_assert_row_count
+                disable_assert_row_count,
+                cols_v
             )
                 .string()
                 .unwrap();

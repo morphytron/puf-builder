@@ -87,7 +87,8 @@ pub mod builder {
         template: &str,
         is_verbose: bool,
         builder_re_mapping: i16,
-        disable_assert_row_count: bool
+        disable_assert_row_count: bool,
+        input_cols_to_skip: Vec<usize>
     ) -> Builder {
         if is_verbose {
             println!(
@@ -168,7 +169,13 @@ pub mod builder {
                     csv_row_indices, other_index
                 );
             }*/
-            for i in 0..col_1_size {
+
+            'outer: for i in 0..col_1_size {
+                for x in &input_cols_to_skip {
+                    if *x == i {
+                        continue 'outer;
+                    }
+                }
                 let col_1 = col_ind_1_list[i].clone();
                 let col_2 = col_ind_2_list[i].clone();
                 modified_template = modify_template_based_on_row(
