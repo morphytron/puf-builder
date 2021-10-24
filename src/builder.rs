@@ -355,6 +355,8 @@ pub mod builder {
                 if isArray {
                     builder.append(r#").replacen(r"[", "{", 3000)"#);
                     builder.append(r#".replacen(r"]", "}", 3000)"#);
+                } else if isHash {
+                    builder.append(")");
                 }
                 builder.append(", %OBJ_COLS%");
             }
