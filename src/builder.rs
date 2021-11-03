@@ -71,6 +71,12 @@ pub mod builder {
         builder.string().unwrap()
     }
 
+
+    pub fn split_csv_row_into_vec<'a>(csv_row : &'a str, col_del : &'a str)  -> Vec<&'a str> {
+        let cols  :  Vec<&'a str> =  csv_row.split(col_del).collect::<Vec<&'a str>>();
+        cols
+    }
+
     pub fn start_buildre(
         input: &str,
         csv_row_del: &str,
@@ -88,7 +94,9 @@ pub mod builder {
         is_verbose: bool,
         builder_re_mapping: i16,
         disable_assert_row_count: bool,
-        input_cols_to_skip: Vec<usize>
+        big_rows_to_skip: Vec<usize>,
+        little_rows_to_skip : Vec<usize>,
+        token_ind_of_table_name : usize
     ) -> Builder {
         if is_verbose {
             println!(
@@ -113,16 +121,49 @@ pub mod builder {
         if row_size == 0 {
             panic!("No 'big' rows found.");
         }
-       // dbg!(&csv_row_del);
+        if is_verbose {
+            dbg!(&csv_row_del);
+        }
         let mut csv_rows: Vec<&str> = input.split(csv_row_del).collect();
-        //dbg!(&csv_rows);
+        if is_verbose {
+            dbg!(&csv_rows);
+        }
         let mut input_row_index = 0;
         if !disable_assert_row_count && rows.len() != csv_rows.len() {
-            panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -r flag.");
+            panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -w flag.");
         }
-        for row in rows {
-            let mut modified_template = buildOutputFromEntry(
-                &csv_rows[input_row_index].to_string(),
+        let mut rows_split : Vec<(Vec<String>, Vec<String>)> = Vec::new();
+        let mut count = 0;
+        'outer: for row in rows { //bigger rows
+            for skip_val in &big_rows_to_skip {
+                if *skip_val == count as usize {
+                    continue 'outer;
+                }
+            }
+            let (col_ind_1_list, col_ind_2_list) = retrieve_2_col_lists_from_rows_within_row( //same thing as (field_names, field_types)
+                      row.as_str(),
+                      split_row_by,
+                      split_col_by,
+                      index_1,
+                      index_2,
+                      is_verbose,
+            );
+            if is_verbose {
+                println!(
+                    "row: {}, col_ind_1: <{:?}>, col_ind_2: <{:?}>",
+                    count, col_ind_1_list, col_ind_2_list
+                );
+            }
+            rows_split.push((col_ind_1_list, col_ind_2_list));
+            count += 1;
+        }
+        count = 0;
+        for csv_row in csv_rows {
+            let temp  = rows_split.clone();
+            let row_ind = get_usize_of_col_with_col_index_of_row(csv_row, csv_col_del, token_ind_of_table_name);
+            let (col_ind_1_list, col_ind_2_list) = temp.get(row_ind).unwrap();
+            let mut modified_template= buildOutputFromEntry(
+                &csv_row.to_string(),
                 template.clone().to_string(),
                 csv_col_del,
                 token,
@@ -131,24 +172,29 @@ pub mod builder {
             if is_verbose {
                 print!("{}\r", modified_template);
             }
-            let (col_ind_1_list, col_ind_2_list) = retrieve_2_col_lists_from_rows_within_row( //same thing as (field_names, field_types)
-                row.as_str(),
-                split_row_by,
-                split_col_by,
-                index_1,
-                index_2,
-                is_verbose,
-            );
-            if is_verbose {
-                println!(
-                    "col_ind_1_list: <{:?}>, col_ind_2_list: <{:?}>",
-                    col_ind_1_list, col_ind_2_list
-                );
-            }
             let col_1_size = col_ind_1_list.len();
             let col_2_size = col_ind_2_list.len();
             if col_1_size != col_2_size {
                 panic!("The number of columns in col index 1 should have the same count as the number of columns in col index 2.  Assertion failed!  These values are set with the --col-1-index and --col-2-index, which default to 0 and 1 respectively.");
+            }
+            'outer: for i in 0..col_1_size {
+                for x in &little_rows_to_skip {
+                    if *x == i {
+                        continue 'outer;
+                    }
+                }
+                let col_1 = col_ind_1_list[i].clone();
+                let col_2 = col_ind_2_list[i].clone();
+                modified_template = modify_template_based_on_row(
+                    col_1,
+                    col_2,
+                    modified_template.as_str(),
+                    is_struct,
+                    i == col_1_size - 1,
+                );
+                if is_verbose {
+                    print!("{}\r", modified_template);
+                }
             }
             /*let mut csv_row_indices: Vec<usize> = vec![other_index];
             if builder_re_mapping != -1 {
@@ -169,34 +215,16 @@ pub mod builder {
                     csv_row_indices, other_index
                 );
             }*/
-
-            'outer: for i in 0..col_1_size {
-                for x in &input_cols_to_skip {
-                    if *x == i {
-                        continue 'outer;
-                    }
-                }
-                let col_1 = col_ind_1_list[i].clone();
-                let col_2 = col_ind_2_list[i].clone();
-                modified_template = modify_template_based_on_row(
-                    col_1,
-                    col_2,
-                    modified_template.as_str(),
-                    is_struct,
-                    i == col_1_size - 1,
-                );
-                if is_verbose {
-                    print!("{}\r", modified_template);
-                }
-            }
-
-           //dbg!(&row);
-            input_row_index += 1;
             final_string.append(format!("{}\n", modified_template));
         }
         final_string
     }
 
+
+    pub fn get_usize_of_col_with_col_index_of_row(row : &str, col_del: &str,  ind : usize) -> usize  {
+        let col = split_csv_row_into_vec(row, col_del);
+        col[ind].parse::<usize>().unwrap()
+    }
     pub fn retrieve_csv_row_indices_by_col_mapping_and_row(
         csv_rows: &Vec<&str>,
         input_row: &Match,

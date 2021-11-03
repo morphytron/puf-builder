@@ -156,11 +156,26 @@ fn main() {
                 .required(false)
                 .short('w')
                 .takes_value(false))
-            .arg(Arg::new("skip_cols")
-                .long("skip-cols")
-                .about("Skip the column index for each numeric value in this array, delineated by commas.  (Only works with the input file, not the csv input parameter.)")
-                .short('S')
+            .arg(Arg::new("skip_little_rows")
+                .long("skip-little-i-rows")
+                .about("Skip the little row index for each numeric value in this array, delineated by commas.  (Only works with the input file, not the csv input parameter.)")
+                .short('L')
+                .default_missing_value("")
                 .required(false)
+                .takes_value(true))
+            .arg(Arg::new("skip_big_rows")
+                .long("skip-big-i-rows")
+                .about("Skip the big row index for each numeric value in this array, delineated by commas.  (Only works with the input file, not the csv input parameter.)")
+                .short('B')
+                .default_missing_value("")
+                .required(false)
+                .takes_value(true))
+            .arg(Arg::new("map_row_vs_csv_col_ind")
+                .long("map-i-row-vs-col-index")
+                .about("If you have a row in a csv file, this value is an index of a column which references the exact big row index of the input file so that it is associated correctly.")
+                .short('M')
+                .default_missing_value("0")
+                .required(true)
                 .takes_value(true))
             .arg(Arg::new("re_mappings")
                 .long("builder-re-mappings")
@@ -225,8 +240,8 @@ fn main() {
                 .short('b')
                 .long("big-row-delim")
                 .required(false)
-                .default_value(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+")
-                .default_missing_value(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+")
+                .default_value(r"pub[\s]+struct[\s]+[\w]{1,}[\s]+\{[\w\s\d:;<>,]+")
+                .default_missing_value(r"pub[\s]+struct[\s]+[\w]{1,}[\s]+\{[\w\s\d:;<>,]+")
                 .takes_value(true))
             .arg(Arg::new("templ_fname")
                 .value_name("templ_fname")
@@ -333,7 +348,7 @@ fn main() {
         let delimitter_row = matches.value_of("row_delim").unwrap_or("\n");
         let csv_delimitter_row = matches.value_of("csv_row_delim").unwrap_or("\n");
         let csv_delimitter_col = matches.value_of("csv_col_delim").unwrap_or(",");
-        let delimitter_bigger_row = matches.value_of("big_row_delim").unwrap_or(r"pub struct [\w]{1,} \{[\w\s\d\D--\}]+");
+        let delimitter_bigger_row = matches.value_of("big_row_delim").unwrap_or(r"pub[\s]+struct[\s]+[\w]{1,}[\s]+\{[\w\s\d:;<>,]+");
         let template_file_name = matches.value_of("templ_fname").unwrap_or("");
         let mut disable_assert_row_count = false;
         if matches.occurrences_of("unsafe_row_count") > 0 {
@@ -373,12 +388,25 @@ fn main() {
                 i_encoding
             );
         } else if subcmd == "buildre" {
-            let skip_cols_str = matches.value_of("skip_cols").unwrap_or("");
-            let cols_to_skip_v : Vec<&str> = skip_cols_str.split(",").collect();
-            let mut cols_v : Vec<usize> = Vec::new();
-            for col in cols_to_skip_v {
-                let col_val : usize = col.parse::<usize>().unwrap();
-                cols_v.push(col_val);
+            let map_row_vs_csv_col_ind = matches.value_of("map_row_vs_csv_col_ind").unwrap_or("0");
+            let map_row_vs_col = map_row_vs_csv_col_ind.parse::<usize>().unwrap();
+            let mut l_rows_v : Vec<usize> = Vec::new();
+            let skip_l_rows_str = matches.value_of("skip_little_rows").unwrap_or("");
+            if skip_l_rows_str != "" {
+                let l_rows_to_skip_v : Vec<&str> = skip_l_rows_str.split(",").collect();
+                for row in l_rows_to_skip_v {
+                    let row_val : usize = row.parse::<usize>().unwrap();
+                    l_rows_v.push(row_val);
+                }
+            }
+            let mut rows_v : Vec<usize> = Vec::new();
+            let skip_b_row_str = matches.value_of("skip_big_rows").unwrap_or("");
+            if skip_b_row_str != "" {
+                let rows_to_skip_v : Vec<&str> = skip_b_row_str.split(",").collect();
+                for row in rows_to_skip_v {
+                    let row_val : usize = row.parse::<usize>().unwrap();
+                    rows_v.push(row_val);
+                }
             }
             let builder_re_mappings = matches.value_of("re_mappings").unwrap_or("-1").parse::<i16>().unwrap();
             let input_bytes = read_file(input_file_name, i_encoding).unwrap();
@@ -408,7 +436,9 @@ fn main() {
                 verbose,
                 builder_re_mappings,
                 disable_assert_row_count,
-                cols_v
+                rows_v,
+                l_rows_v,
+                map_row_vs_col
             )
                 .string()
                 .unwrap();
