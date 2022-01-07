@@ -323,7 +323,7 @@ pub mod builder {
             // for format! placeholders in the SQL statement, where field type matters.  Separated by columns.
             builder = Builder::default();
             let mut x = col_2.contains("String");
-            let mut y = col_2.contains("NaiveDateTime");
+            let mut y = col_2.contains("DateTimeUtc");
             let z = col_2.contains("NaiveDate");
             let isArray = col_2.contains("Vec");
             let isHash = col_2.contains("HashMap");
