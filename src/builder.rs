@@ -323,26 +323,12 @@ pub mod builder {
             // for format! placeholders in the SQL statement, where field type matters.  Separated by columns.
             builder = Builder::default();
             let mut x = col_2.contains("String");
-            let mut y = col_2.contains("DateTimeUtc");
-            let z = col_2.contains("NaiveDate");
+            //let mut y = col_2.contains("DateTimeUtc");
+            //let z = col_2.contains("NaiveDate");
             let isArray = col_2.contains("Vec");
             let isHash = col_2.contains("HashMap");
-            if x || y || z {
-                builder.append("'");
-            }
-            if isArray {
-                builder.append("{:?}");
-            } else {
-                builder.append("{}");
-            }
-            if is_last_row {
-                if x || y || z {
-                    builder.append("'");
-                }
-            } else {
-                if x || y || z {
-                    builder.append("'");
-                }
+            builder.append("{}");
+            if !is_last_row {
                 builder.append(", %COL_PLACEMENTS%");
             }
             modified_template = modified_template.replacen(
@@ -353,6 +339,11 @@ pub mod builder {
             // for format! variables after the first parameter in order... default variable name is "obj."
             builder = Builder::default();
             x = col_2.contains("Option");
+            if x {
+                builder.append("deserialize_option(");
+            } else {
+                builder.append("deserialize_(&");
+            }
             if isArray {
                 builder.append("\nformat!(\"{:?}\",");
             } else if isHash {
@@ -362,7 +353,7 @@ pub mod builder {
                 builder.append("obj.");
                 if x {
                     builder.append(col_1);
-                    builder.append(".as_ref().unwrap()");
+                    builder.append(".as_ref()");
                 } else {
                     builder.append(col_1);
                 }
@@ -372,11 +363,12 @@ pub mod builder {
                 } else if isHash {
                     builder.append(")");
                 }
+                builder.append(")");
             } else {
                 builder.append("obj.");
                 if x {
                     builder.append(col_1);
-                    builder.append(".as_ref().unwrap()");
+                    builder.append(".as_ref()");
                 } else {
                     builder.append(col_1);
                 }
@@ -386,6 +378,7 @@ pub mod builder {
                 } else if isHash {
                     builder.append(")");
                 }
+                builder.append(")");
                 builder.append(", %OBJ_COLS%");
             }
             modified_template =
