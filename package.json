@@ -1,0 +1,28 @@
+{
+  "name": "puf-builder",
+  "version": "1.0.0",
+  "description": "Helps duplicate code using templates when it is not an anti-pattern.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "cargo build --release"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/morphytron/puf-builder.git"
+  },
+  "keywords": [
+    "builder",
+    "codegen",
+    "generate",
+    "templates",
+    "csv",
+    "regex"
+  ],
+  "author": "Daniel Alexander Apatiga",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/morphytron/puf-builder/issues"
+  },
+  "homepage": "https://github.com/morphytron/puf-builder#readme"
+}
