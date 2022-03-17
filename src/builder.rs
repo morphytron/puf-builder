@@ -128,7 +128,6 @@ pub mod builder {
         if is_verbose {
             dbg!(&csv_rows);
         }
-        let mut input_row_index = 0;
         if !disable_assert_row_count && rows.len() != csv_rows.len() {
             panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -w flag.");
         }

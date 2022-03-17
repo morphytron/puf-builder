@@ -14,43 +14,10 @@ use crate::io::io::*;
 use crate::builder::builder::*;
 use std::ops::Deref;
 
-// static strings
-static HELP: &'static str = r##"
-*****General usage of this program*****
-For configuring TLS, port, and server address, configure the Rocket.toml or environment variables (in the same folder as this application) as described on their website:
-https://www.rocket.rs/
-
--postgresconns -- sets the number of asynchronous postgresql connections to make.
--v -- indicate verbose output.
--append -- This indicates it will append file contents from an input file to an output file. As opposed to using Shell, Bash, or Powerpoint/CMD, it maintains utf-8 encoding. It also prevents the application from running as a server.
-
-For template building only (basic usage):
-pufm -i <input-file-path (of CSV-formatted file)> -t <template file path> -o <output file path>
-
-For advanced usage, these additional parameters are availble:
--i-csv-dr -- the regexp for delimitting the row of the CSV input file. Default is newline aka. "\n".
--i-csv-dc -- the regexp for delimitting the column of each row.  Default is comma aka. ",".
--tolken <a unique tolken string> -- this indicates the unique tolken value proceeded by the index of the column (starting with value 1) for parsing the template (where to replace the values from the input to the template.)  The default is ???.
--builder -- this prevents the application from running as an API service for Pickup Fitness, indicating that it is to be used for building scripts or files from a template, input (to an output.)  Aka., this arg prevents PostgreSQL connections from establishing and binding the IP address and port for the RESTful Web Service.
--listfuncs -- this is strictly for listing the functions generated as a post script building step.
--builder-re -- this requires additional parameters to be added: -i-csv <file path>, and more described below.  This will make additional string tolkens available within the template file given the parsed input:
-  %COLS% : If the program is run with -is-struct argument, this tolken will list each public variable in a struct of a file as a list, e.g. "username, password"
-  %COLS_PLACEMENTS% :  the usage of this tolken is for SQL-templated coding.  If the program is run with -is-struct argument, this tolken will list format-macro-compatible placement tolkens for Rust handling of formatting the stringed SQL statement.  For example, it could look like this {} '{}' {} depending on whether the variable is a string or not.
-  %OBJ_COLS% : If the program is run with -is-struct argument, this tolken will generate a list of Rust functions that will extract the data from serializable Json struct.  It takes into consideration whether the struct variable is an Option enum and the output looks like this: obj.variable_name, obj.variable_name.unwrap()
--is-struct -- this works only with -builder-re... it indicates that the input-argument file will be parsed for Rust structs.
-
-If not using -is-struct while using -builder-re mode, add additional args for parsing the input file.  These are:
--i-dR -- this regexp will split the file into groups for parsing the rows and columns.
--i-dr -- this regexp will retrieve the rows from each respective grouping.
--i-dc -- this regexp will split the row as delimitted.
-
--builder-re-column-for-map -- this works only in conjunction with -builder-re.  Semantically, for the correct mapping of the csv row with its corresponding input-parsed row, a column index is necessary as a pointer to the string/regexpression for correctly locating it.
-    An example: -builder-re-mapping 5.
-"##;
 fn main() {
-    let mut app = App::new("Atomhid Coder")
+    let mut app = App::new("PUF Builder")
         .about("By using various algorithms, you can create scripts, texts, and other patternable outputs.  This application focuses on simplifying coding where possible.")
-        .author("Daniel Alexander Apatiga <daniel.apatiga@eleventh-hour.club>")
+        .author("Daniel Alexander Apatiga <daniel.apatiga@pickupfit.com>")
         .version("1.0.0")
         .subcommand(App::new("build")
             .about("This algorithm builds your code from templates using a delimitted csv input file, and a template files.  After transformation, a single output file is concatenated from the algorithm.")
