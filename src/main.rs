@@ -1,4 +1,3 @@
-#![feature(toowned_clone_into)]
 extern crate clap;
 extern crate regex;
 extern crate string_builder;
@@ -6,7 +5,6 @@ extern crate encoding_rs;
 extern crate encoding_rs_io;
 mod builder;
 mod io;
-
 use std::env;
 use clap::*;
 use regex::{Match, Regex};
@@ -23,7 +21,11 @@ fn main() {
             .about("This algorithm builds your code from templates using a delimitted csv input file, and a template files.  After transformation, a single output file is concatenated from the algorithm.")
             .arg(Arg::new("token")
                 .short('k')
-                .about("Set the token value inside a template txt file.  A parser will look for these tokens, which will have a numeric value corresponding to the column number in the csv file like so: <token><number>.  E.g., ???1")
+                .about(r"Set the token value inside a template txt file.
+                A parser will look for these tokens, which will have a numeric value corresponding to the column number in the csv file like so: <token><number>.  E.g., ???1. Additional parameters may be passed into a token for string slicing a particular column.
+                The tokenization feature has additional features that can be utiliized in the template file.  For example, if you wanted to slice the string acquired at column 1 of your input file for the final output, then you would pass into your template file an argument next to the token, e.g., a value that looks like the following: \<regexp:<actual regexp>\>.
+                Where regexp is the regular expression defined in the regexp crate.  The carots of which are nested should be omitted, so actually, it would like the following in single quotes, '???1<<regex:(?:/)(?P<a>[0-9]?[a-z]*)$>', just as an example.
+                As per the regex crate, the current implementation uses the capture algorithm to find the desired slice, and the particular capture group name is just 'a.'  For all intents and purposes, to omit a preceding text, you write the desired code in a non-capturing group like so: (?:<some regex>), for instance")
                 .long("token")
                 .default_missing_value("???")
                 .required(false)
@@ -434,6 +436,7 @@ fn main() {
                 delimitter_row,
                 token,
                 trim_new_lines,
+                verbose
             );
             if output_file_name != "" {
                 write_file(output_file_name, &mut output, o_encoding);

@@ -14,6 +14,7 @@ pub mod builder {
         col_del: &str,
         token: &str,
         trim_endlines: bool,
+        verbose: bool,
     ) -> String {
         println!("In buildOutputFromEntry function.");
         //dbg!(entry, &template, col_del, token, trim_endlines);
@@ -27,12 +28,61 @@ pub mod builder {
                 return_on_col_pattern.replacen(col, 100, "").to_string();
             }
             //dbg!(col);
-            let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
-            template = template.replacen(token_replacement.as_str(), col, 1000);
+            template = replace_token_in_template(token, index, template, col, verbose);
             //dbg!(&template);
             //println!("{}",clone);
             index += 1;
         }
+        template
+    }
+
+    fn replace_token_in_template(token : &str, index: usize, mut template: String, col : &str, verbose: bool) -> String {
+        let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
+        let token_matcher_re = token_replacement.clone() + "<<regex:.*>>";
+        if verbose {
+            dbg!(token_matcher_re.as_str());
+        }
+        let token_matcher_reg = Regex::new(token_matcher_re.as_str());
+        //get each match for the token.
+        let mut templ_clone = template.clone();
+        if let Ok(token_matcher_rege) = token_matcher_reg {
+            for mat in token_matcher_rege.find_iter(templ_clone.as_str()) {
+                if verbose {
+                    println!("Found a match for token replacement with regex! {}", mat.as_str());
+                }
+                let start = mat.start();
+                let stop = mat.end();
+                let first_part_template = &template[0..start];
+                let token_str = mat.as_str();
+                let rege_isolator = "(?:".to_string() + token_replacement.as_str() + "<<regex:)(?P<re>.*)(?:>>)";
+                let regex_isolator_re = Regex::new(rege_isolator.as_str()).unwrap();
+                let captures = regex_isolator_re.captures(token_str);
+                if let Some(cap) = captures {
+                    let regex_specified = &cap["re"];
+                    if verbose {
+                        println!("Regex specified: {}.", regex_specified);
+                    }
+                    let re_specified = Regex::new(regex_specified).unwrap();
+                    let col_captures = re_specified.captures(col);
+                    if let Some(cap) = col_captures {
+                        template = first_part_template.to_string() + &cap["a"] + &template[stop..template.len()];
+                        if verbose {
+                            dbg!(&template);
+                        }
+                    } else {
+                        template = template.replace(mat.as_str(), col);
+                        if verbose {
+                            println!("Did did not capture from the regex, '{}'... so, replaced '{}' with '{}'.", regex_specified, mat.as_str(), col);
+                        }
+                    }
+                } else {
+                    panic!("Could not find regexp in the <<regex::exp> expression located at char position {}.", start);
+                }
+            }
+        } else if verbose {
+            println!("Token did not have a regex qualifier...");
+        }
+        template = template.replace(token_replacement.as_str(), col);
         template
     }
 
@@ -43,6 +93,7 @@ pub mod builder {
         row_del: &str,
         token: &str,
         trim_endlines: bool,
+        verbose : bool,
     ) -> String {
         let mut builder = Builder::default();
         let mut rows = input.as_str().split(row_del);
@@ -52,8 +103,7 @@ pub mod builder {
             let mut index = 1;
             let mut clone = template.clone();
             for mut col in cols {
-                let mut token_replacement =
-                    format!("{0}{1}", token.to_string(), index.to_string());
+                let mut token_replacement = token.to_string();
                 if trim_endlines {
                     let col_size = token_replacement.len();
                     token_replacement = token_replacement
@@ -62,7 +112,7 @@ pub mod builder {
                         .to_string();
                     token_replacement = token_replacement.trim_end_matches("\n").to_string();
                 }
-                clone = clone.replace(&token_replacement, col);
+                clone = replace_token_in_template(token_replacement.as_str(), index, clone, col, verbose);
                 //println!("{}",clone);
                 index += 1;
             }
@@ -166,7 +216,8 @@ pub mod builder {
                 template.clone().to_string(),
                 csv_col_del,
                 token,
-                trim_endlines
+                trim_endlines,
+                is_verbose
             );
             if is_verbose {
                 print!("{}\r", modified_template);
