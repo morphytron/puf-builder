@@ -36,6 +36,21 @@ fn main() {
                 .required(false)
                 .default_missing_value(",")
                 .takes_value(true))
+            .arg(Arg::new("omit_csv_col_re")
+                .short('n')
+                .long("omit-csv-col-re")
+                .default_value("")
+                .required(false)
+                .takes_value(true)
+                .about("For each column in a row from the CSV file, this regex will attempt to match each column, and if it does, it will omit that column if it captures.  If it captures, it will replace the token with an empty string.")
+            )
+                .arg(Arg::new("omit_csv_row_re")
+                .short('w')
+                .long("omit-csv-row-re")
+                .default_value("")
+                .takes_value(true)
+                .about("Algorithmically, if the regex matches with any part of the CSV row, the row will be omitted from the final output string.")
+            )
             .arg(Arg::new("row_delim")
                 .short('r')
                 .long("row_delim")
@@ -119,11 +134,34 @@ fn main() {
         )
         .subcommand(App::new("buildre")
             .about("This algorithm builds from two input files rather than just one.  Keeping the input csv file, you also specify another file from which you multiply its matrice of rows and columns with the rows and columns of the csv file.")
+            .arg(Arg::new("omit_csv_col_re")
+                .short('n')
+                .long("omit-csv-col-re")
+                .required(false)
+                .default_value("")
+                .takes_value(true)
+                .about("For each column in a row from the CSV file, this regex will attempt to match each column, and if it does, it will omit that column if it captures.  If it captures, it will replace the token with an empty string.")
+            )
+            .arg(Arg::new("omit_csv_row_re")
+                .short('w')
+                .long("omit-csv-row-re")
+                .default_value("")
+                .takes_value(true)
+                .about("Algorithmically, if the regex matches with any part of the CSV row, the row will be omitted from the final output string.")
+            )
+            .arg(Arg::new("omit_row_re")
+                .short('N')
+                .long("omit-big-row-re")
+                .required(false)
+                .takes_value(true)
+                .default_value("")
+                .about("For each big row parsed in the second input file (not the CSV), this regex will attempt to match the row, and if it does, it will omit that row from the final output.")
+            )
             .arg(Arg::new("unsafe_row_count")
                 .long("disable-row-count-assert")
                 .default_missing_value("false")
                 .required(false)
-                .short('w')
+                .short('W')
                 .takes_value(false))
             .arg(Arg::new("skip_little_rows")
                 .long("skip-little-i-rows")
@@ -240,7 +278,7 @@ fn main() {
                 .required(false)
                 .takes_value(true))
             .arg(Arg::new("t_encoding")
-                .short('g')
+                .short('G')
                 .long("o-encoding")
                 .required(false)
                 .takes_value(true))
@@ -309,6 +347,9 @@ fn main() {
         if matches.occurrences_of("list_funcs") > 0 {
             listfuncs = true;
         }
+        let omit_csv_row_re = matches.value_of("omit_csv_row_re").unwrap_or("");
+        let omit_csv_col_re = matches.value_of("omit_csv_col_re").unwrap_or("");
+        let omit_big_row_re = matches.value_of("omit_row_re").unwrap_or("");
         let input_file_name = matches.value_of("input_fname").expect("Missing input filename.");
         let csv_input_file_name = matches.value_of("csv_input_fname").unwrap_or_default();
         let token = matches.value_of("token").unwrap_or("???");
@@ -401,13 +442,16 @@ fn main() {
                 delimitter_row,
                 delimitter_col,
                 is_struct,
-                template_text.as_str(),
+                template_text,
                 verbose,
                 builder_re_mappings,
                 disable_assert_row_count,
                 rows_v,
                 l_rows_v,
-                map_row_vs_col
+                map_row_vs_col,
+                omit_csv_col_re,
+                omit_csv_row_re,
+                omit_big_row_re,
             )
                 .string()
                 .unwrap();
@@ -436,7 +480,9 @@ fn main() {
                 delimitter_row,
                 token,
                 trim_new_lines,
-                verbose
+                verbose,
+                omit_csv_col_re,
+                omit_csv_row_re
             );
             if output_file_name != "" {
                 write_file(output_file_name, &mut output, o_encoding);

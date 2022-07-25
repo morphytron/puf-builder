@@ -1,60 +1,116 @@
 pub mod builder {
-    use regex::{Match, Regex};
     use crate::io::io::{read_file, write_file};
-    use string_builder::Builder;
-    use std::sync::{Mutex, MutexGuard};
     use crate::lazy_static::lazy_static;
-    lazy_static!(
-        static ref return_on_col_pattern : Regex = Regex::new("[\r\n]*").unwrap();
-    );
+    use regex::{Match, Regex};
+    use std::borrow::{Borrow, BorrowMut};
+    use std::cell::{RefCell, RefMut};
+    use std::convert::TryFrom;
+    use std::ops::{Deref, DerefMut};
+    use std::sync::{Mutex, MutexGuard};
+    use string_builder::Builder;
+    lazy_static! {
+        static ref return_on_col_pattern: Regex = Regex::new("[\r\n]*").unwrap();
+    }
+    fn omit_rows_by_re<'a>(omit_csv_row_re :&str, mut cols : Vec<&'a str>) -> Vec<&'a str> {
+        let csv_row_re = Regex::new(omit_csv_row_re);
+        if let Ok(re) = csv_row_re {
+            cols = cols.iter().filter(|r| {
+                let c = re.captures(r);
+                if let Some(cap) = c {
+                    if cap.len() > 0 {
+                        return false;
+                    }
+                    return true;
+                }
+                true
+            }).map(|r| *r).collect();
+        } else {
+            panic!("Could not create Regex from '{}'.", omit_csv_row_re);
+        }
+        cols
+    }
 
-    pub fn buildOutputFromEntry(
-        entry: &String,
-        mut template: String,
-        col_del: &str,
+    fn omit_cols_by_re(
+        omit_csv_col_re: &str,
+        temp: String,
+        mut cols: Vec<String>,
         token: &str,
         trim_endlines: bool,
         verbose: bool,
-    ) -> String {
-        println!("In buildOutputFromEntry function.");
-        //dbg!(entry, &template, col_del, token, trim_endlines);
-        let mut cols : Vec<&str> = entry.split(col_del).collect();
-        //dbg!(&cols);
-        let mut index = 1;
-        for mut col in cols {
-
-            let mut t = col;
-            if trim_endlines {
-                return_on_col_pattern.replacen(col, 100, "").to_string();
-            }
-            //dbg!(col);
-            template = replace_token_in_template(token, index, template, col, verbose);
-            //dbg!(&template);
-            //println!("{}",clone);
-            index += 1;
+    ) -> (String, Vec<String>) {
+        let re = Regex::new(omit_csv_col_re);
+        if verbose {
+            println!("Omit csv_col_re value has been set to regular expression: {}", omit_csv_col_re);
         }
-        template
+        let mut final_string = String::new();
+        if let Ok(rege) = re.clone() {
+            let mut index = 0;
+            for col in cols.iter_mut() {
+                if let Some(captur) = rege.captures(col.as_str()) {
+                    if captur.len() > 0 {
+                        if verbose {
+                            println!("Omitting: <regex: {}, column: {}>", col, rege.as_str());
+                        }
+                        if trim_endlines {
+                            return_on_col_pattern.replace(col, "").to_string();
+                        }
+                        *col = "".to_string();
+                        //dbg!(col);
+                        final_string = replace_token_in_template(
+                            token,
+                            index.clone(),
+                            temp.to_string(),
+                            col,
+                            verbose,
+                        );
+                    }
+                } else {
+                    if verbose {
+                        println!("Not omitting: <column: {}>", col.as_str());
+                    }
+                    if trim_endlines {
+                        return_on_col_pattern.replace(col, "").to_string();
+                    }
+                    //dbg!(col);
+                    final_string = replace_token_in_template(token, index, temp.to_string(), col, verbose);
+                    index += 1;
+                }
+            }
+        } else {
+            panic!(
+                "Could not create a reg. expression from  --omit-csv-col-re value: '{}'.",
+                omit_csv_col_re
+            );
+        }
+        (final_string, cols)
     }
-
-    fn replace_token_in_template(token : &str, index: usize, mut template: String, col : &str, verbose: bool) -> String {
+    fn replace_token_in_template(
+        token: &str,
+        index: usize,
+        template: String,
+        col: &str,
+        verbose: bool,
+    ) -> String {
         let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
         let token_matcher_re = token_replacement.clone() + "<<regex:.*>>";
-        if verbose {
-            dbg!(token_matcher_re.as_str());
-        }
         let token_matcher_reg = Regex::new(token_matcher_re.as_str());
         //get each match for the token.
         let mut templ_clone = template.clone();
         if let Ok(token_matcher_rege) = token_matcher_reg {
-            for mat in token_matcher_rege.find_iter(templ_clone.as_str()) {
+            let temp_template = templ_clone.clone();
+            for mat in token_matcher_rege.find_iter(temp_template.as_str()) {
                 if verbose {
-                    println!("Found a match for token replacement with regex! {}", mat.as_str());
+                    println!(
+                        "Found match for regex parameter by token:  <regex:{}>.",
+                        mat.as_str()
+                    );
                 }
                 let start = mat.start();
                 let stop = mat.end();
                 let first_part_template = &template[0..start];
                 let token_str = mat.as_str();
-                let rege_isolator = "(?:".to_string() + token_replacement.as_str() + "<<regex:)(?P<re>.*)(?:>>)";
+                let rege_isolator =
+                    "(?:".to_string() + token_replacement.as_str() + "<<regex:)(?P<re>.*)(?:>>)";
                 let regex_isolator_re = Regex::new(rege_isolator.as_str()).unwrap();
                 let captures = regex_isolator_re.captures(token_str);
                 if let Some(cap) = captures {
@@ -62,18 +118,25 @@ pub mod builder {
                     if verbose {
                         println!("Regex specified: {}.", regex_specified);
                     }
-                    let re_specified = Regex::new(regex_specified).unwrap();
-                    let col_captures = re_specified.captures(col);
-                    if let Some(cap) = col_captures {
-                        template = first_part_template.to_string() + &cap["a"] + &template[stop..template.len()];
-                        if verbose {
-                            dbg!(&template);
+                    let re_specified_ = Regex::new(regex_specified);
+                    if let Ok(re_specified) = re_specified_ {
+                        let col_captures = re_specified.captures(col);
+                        if let Some(cap) = col_captures {
+                            let match_ = &cap["a"];
+                            templ_clone = first_part_template.to_string() + match_+ &templ_clone[stop..template.len()];
+                            if verbose {
+                                println!("The column slice is '{}'", match_);
+                                println!("The new template looks like: '{}'.", templ_clone.as_str());
+                            }
+                        } else {
+                            templ_clone = templ_clone.replace(mat.as_str(), col);
+                            if verbose {
+                                println!("Did did not capture from the regex, '{}'... so, replaced '{}' with '{}'.", regex_specified, mat.as_str(), col);
+                            }
                         }
-                    } else {
-                        template = template.replace(mat.as_str(), col);
-                        if verbose {
-                            println!("Did did not capture from the regex, '{}'... so, replaced '{}' with '{}'.", regex_specified, mat.as_str(), col);
-                        }
+                    }
+                    else {
+                        panic!("Could not compile regex: '{}'", regex_specified);
                     }
                 } else {
                     panic!("Could not find regexp in the <<regex::exp> expression located at char position {}.", start);
@@ -82,27 +145,98 @@ pub mod builder {
         } else if verbose {
             println!("Token did not have a regex qualifier...");
         }
-        template = template.replace(token_replacement.as_str(), col);
-        template
+        templ_clone = templ_clone.replace(token_replacement.as_str(), col);
+        templ_clone
+    }
+    // Called by buildre function
+    pub fn buildOutputFromEntry(
+        entry: String,
+        template: &mut String,
+        col_del: &str,
+        token: &str,
+        trim_endlines: bool,
+        verbose: bool,
+        omit_csv_col_re: &str,
+    ) -> String {
+        println!("In buildOutputFromEntry function.");
+        //dbg!(entry, &template, col_del, token, trim_endlines);
+        let mut cols: Vec<String> = Vec::new();
+        for c in entry.split(col_del) {
+            cols.push(c.to_string());
+        }
+        let mut index = 1;
+        if omit_csv_col_re != "" {
+            let (t, cols_) = omit_cols_by_re(
+                omit_csv_col_re,
+                template.clone(),
+                cols,
+                token,
+                trim_endlines,
+                verbose,
+            );
+            *template = t;
+            cols = cols_;
+        } else {
+            //dbg!(&cols);
+            for col in &cols {
+                if trim_endlines {
+                    return_on_col_pattern.replace(col, "").to_string();
+                }
+                //dbg!(col);
+                *template =
+                    replace_token_in_template(token, index, template.to_string(), col, verbose);
+                //dbg!(&template);
+                //println!("{}",clone);
+                index += 1;
+            }
+        }
+        template.clone()
     }
 
+    // Called by build function
     pub fn buildOutput(
         input: &String,
-        template: String,
+        mut template: String,
         col_del: &str,
         row_del: &str,
         token: &str,
         trim_endlines: bool,
-        verbose : bool,
+        verbose: bool,
+        omit_csv_csv_re: &str,
+        omit_csv_row_re: &str,
     ) -> String {
         let mut builder = Builder::default();
-        let mut rows = input.as_str().split(row_del);
+        let mut rows: Vec<&str> = input.as_str().split(row_del).collect();
+        if omit_csv_row_re != "" {
+            if verbose {
+                println!("Omitting rows by re...");
+            }
+            rows = omit_rows_by_re(omit_csv_row_re, rows);
+            if verbose{
+                println!("Rows length is {}.", rows.len());
+            }
+        }
         for row in rows {
-            let mut cols = row.split(col_del);
-            let (size, optional_size) = cols.size_hint();
-            let mut index = 1;
             let mut clone = template.clone();
-            for mut col in cols {
+            let mut cols: Vec<String> = Vec::new();
+            for c in row.split(col_del) {
+                cols.push(c.to_string());
+            }
+            // let size = cols.len();
+            if omit_csv_csv_re != "" {
+                let(c_, cols_) = omit_cols_by_re(
+                    omit_csv_csv_re,
+                    clone.clone(),
+                    cols,
+                    token,
+                    trim_endlines,
+                    verbose,
+                );
+                clone = c_;
+                cols = cols_;
+            }
+            let mut index = 1;
+            for col in cols.iter() {
                 let mut token_replacement = token.to_string();
                 if trim_endlines {
                     let col_size = token_replacement.len();
@@ -112,18 +246,23 @@ pub mod builder {
                         .to_string();
                     token_replacement = token_replacement.trim_end_matches("\n").to_string();
                 }
-                clone = replace_token_in_template(token_replacement.as_str(), index, clone, col, verbose);
+                clone = replace_token_in_template(
+                    token_replacement.as_str(),
+                    index,
+                    clone.clone(),
+                    col,
+                    verbose,
+                );
                 //println!("{}",clone);
                 index += 1;
             }
-            builder.append(clone);
+            builder.append(clone.as_str());
         }
         builder.string().unwrap()
     }
 
-
-    pub fn split_csv_row_into_vec<'a>(csv_row : &'a str, col_del : &'a str)  -> Vec<&'a str> {
-        let cols  :  Vec<&'a str> =  csv_row.split(col_del).collect::<Vec<&'a str>>();
+    pub fn split_csv_row_into_vec<'a>(csv_row: &'a str, col_del: &'a str) -> Vec<&'a str> {
+        let cols: Vec<&'a str> = csv_row.split(col_del).collect::<Vec<&'a str>>();
         cols
     }
 
@@ -140,13 +279,16 @@ pub mod builder {
         split_r_by: &str,
         split_column_by: &str,
         is_struct: bool,
-        template: &str,
+        mut template: String,
         is_verbose: bool,
         builder_re_mapping: i16,
         disable_assert_row_count: bool,
         big_rows_to_skip: Vec<usize>,
-        little_rows_to_skip : Vec<usize>,
-        token_ind_of_table_name : usize
+        little_rows_to_skip: Vec<usize>,
+        token_ind_of_table_name: usize,
+        omit_csv_col_re: &str,
+        omit_csv_row_re: &str,
+        omit_big_row_re: &str,
     ) -> Builder {
         if is_verbose {
             println!(
@@ -166,7 +308,29 @@ pub mod builder {
             index_1 = 1usize;
             index_2 = 2usize;
         }
-        let mut rows: Vec<_> = row_reg.find_iter(regexable_input).collect();
+        let mut rows: Vec<Match> = row_reg.find_iter(regexable_input).collect();
+        if omit_big_row_re != "" {
+            let re = Regex::new(omit_big_row_re);
+            if let Ok(r) = re {
+                rows = rows
+                    .iter_mut()
+                    .filter(move |big_row| {
+                        let captures = r.captures(big_row.as_str());
+                        if let Some(c) = captures {
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    })
+                    .map(|t| *t)
+                    .collect();
+            } else {
+                panic!(
+                    "Could not create reg. expression from  --omit-big-row-re value: '{}'.",
+                    omit_big_row_re
+                );
+            }
+        }
         let row_size = rows.len();
         if row_size == 0 {
             panic!("No 'big' rows found.");
@@ -181,21 +345,23 @@ pub mod builder {
         if !disable_assert_row_count && rows.len() != csv_rows.len() {
             panic!("'Big' row count is not the same as the count for csv rows.  Assertion failed!  Disable this feature with the -w flag.");
         }
-        let mut rows_split : Vec<(Vec<String>, Vec<String>)> = Vec::new();
+        let mut rows_split: Vec<(Vec<String>, Vec<String>)> = Vec::new();
         let mut count = 0;
-        'outer: for row in rows { //bigger rows
+        'outer: for row in rows {
+            //bigger rows
             for skip_val in &big_rows_to_skip {
                 if *skip_val == count as usize {
                     continue 'outer;
                 }
             }
-            let (col_ind_1_list, col_ind_2_list) = retrieve_2_col_lists_from_rows_within_row( //same thing as (field_names, field_types)
-                      row.as_str(),
-                      split_row_by,
-                      split_col_by,
-                      index_1,
-                      index_2,
-                      is_verbose,
+            let (col_ind_1_list, col_ind_2_list) = retrieve_2_col_lists_from_rows_within_row(
+                //same thing as (field_names, field_types)
+                row.as_str(),
+                split_row_by,
+                split_col_by,
+                index_1,
+                index_2,
+                is_verbose,
             );
             if is_verbose {
                 println!(
@@ -207,20 +373,28 @@ pub mod builder {
             count += 1;
         }
         count = 0;
+        if omit_csv_row_re != "" {
+            csv_rows  = omit_rows_by_re(omit_csv_row_re, csv_rows);
+        }
         for csv_row in csv_rows {
-            let temp  = rows_split.clone();
-            let row_ind = get_usize_of_col_with_col_index_of_row(csv_row, csv_col_del, token_ind_of_table_name);
+            let temp = rows_split.clone();
+            let row_ind = get_usize_of_col_with_col_index_of_row(
+                csv_row,
+                csv_col_del,
+                token_ind_of_table_name,
+            );
             let (col_ind_1_list, col_ind_2_list) = temp.get(row_ind).unwrap();
-            let mut modified_template= buildOutputFromEntry(
-                &csv_row.to_string(),
-                template.clone().to_string(),
+            let mut modified_template = buildOutputFromEntry(
+                csv_row.to_string(),
+                &mut template.clone(),
                 csv_col_del,
                 token,
                 trim_endlines,
-                is_verbose
+                is_verbose,
+                omit_csv_col_re,
             );
             if is_verbose {
-                print!("{}\r", modified_template);
+                print!("{}\r", modified_template.as_str());
             }
             let col_1_size = col_ind_1_list.len();
             let col_2_size = col_ind_2_list.len();
@@ -243,7 +417,7 @@ pub mod builder {
                     i == col_1_size - 1,
                 );
                 if is_verbose {
-                    print!("{}\r", modified_template);
+                    print!("{}\r", modified_template.as_str());
                 }
             }
             /*let mut csv_row_indices: Vec<usize> = vec![other_index];
@@ -265,13 +439,11 @@ pub mod builder {
                     csv_row_indices, other_index
                 );
             }*/
-            final_string.append(format!("{}\n", modified_template));
+            final_string.append(format!("{}\n", modified_template.as_str()));
         }
         final_string
     }
-
-
-    pub fn get_usize_of_col_with_col_index_of_row(row : &str, col_del: &str,  ind : usize) -> usize  {
+    pub fn get_usize_of_col_with_col_index_of_row(row: &str, col_del: &str, ind: usize) -> usize {
         let col = split_csv_row_into_vec(row, col_del);
         col[ind].parse::<usize>().unwrap()
     }
@@ -314,7 +486,6 @@ pub mod builder {
         }
         return indices;
     }
-
     fn retrieve_2_col_lists_from_rows_within_row<'b>(
         row: &str,
         split_row_by: &str,
@@ -348,7 +519,6 @@ pub mod builder {
         }
         (field_names, field_types)
     }
-
     pub fn modify_template_based_on_row(
         col_1: String,
         col_2: String,
@@ -437,11 +607,9 @@ pub mod builder {
         }
         "".to_string()
     }
-
     pub fn postBuild(file_name: &str, encoding: &str) -> String {
-        let file =
-            String::from_utf8(read_file(file_name, encoding).unwrap())
-                .expect(format!("Failed to decode with {}.", encoding).as_str());
+        let file = String::from_utf8(read_file(file_name, encoding).unwrap())
+            .expect(format!("Failed to decode with {}.", encoding).as_str());
         let re = Regex::new(r"fn [a-z_]{1,}").unwrap();
         let mut functions = Vec::new();
         let mut index = 0;
@@ -455,7 +623,6 @@ pub mod builder {
         }
         let mut other_index = 0;
         let mut builder = Builder::default();
-
         for capture in functions {
             builder.append(capture);
             other_index += 1;
