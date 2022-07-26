@@ -5,6 +5,8 @@ extern crate encoding_rs;
 extern crate encoding_rs_io;
 mod builder;
 mod io;
+mod types;
+
 use std::env;
 use clap::*;
 use regex::{Match, Regex};

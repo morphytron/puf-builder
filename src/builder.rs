@@ -8,9 +8,12 @@ pub mod builder {
     use std::ops::{Deref, DerefMut};
     use std::sync::{Mutex, MutexGuard};
     use string_builder::Builder;
+    use crate::types::Replacement;
+
     lazy_static! {
         static ref return_on_col_pattern: Regex = Regex::new("[\r\n]*").unwrap();
     }
+
     fn omit_rows_by_re<'a>(omit_csv_row_re :&str, mut cols : Vec<&'a str>) -> Vec<&'a str> {
         let csv_row_re = Regex::new(omit_csv_row_re);
         if let Ok(re) = csv_row_re {
@@ -84,6 +87,7 @@ pub mod builder {
         }
         (final_string, cols)
     }
+
     fn replace_token_in_template(
         token: &str,
         index: usize,
@@ -92,62 +96,92 @@ pub mod builder {
         verbose: bool,
     ) -> String {
         let token_replacement = format!("{0}{1}", token.to_string(), index.to_string());
-        let token_matcher_re = token_replacement.clone() + "<<regex:.*>>";
+        if verbose{
+            println!("Token is {}.", token_replacement.as_str());
+        }
+        let token_matcher_re = token_replacement.to_string() + "<<regex:.*?>>";
         let token_matcher_reg = Regex::new(token_matcher_re.as_str());
-        //get each match for the token.
+        //get each match for the token-column combination.
         let mut templ_clone = template.clone();
+        let mut replacements: Vec<Replacement> = Vec::new();
         if let Ok(token_matcher_rege) = token_matcher_reg {
-            let temp_template = templ_clone.clone();
-            for mat in token_matcher_rege.find_iter(temp_template.as_str()) {
-                if verbose {
-                    println!(
-                        "Found match for regex parameter by token:  <regex:{}>.",
-                        mat.as_str()
-                    );
-                }
-                let start = mat.start();
-                let stop = mat.end();
-                let first_part_template = &template[0..start];
-                let token_str = mat.as_str();
-                let rege_isolator =
-                    "(?:".to_string() + token_replacement.as_str() + "<<regex:)(?P<re>.*)(?:>>)";
-                let regex_isolator_re = Regex::new(rege_isolator.as_str()).unwrap();
-                let captures = regex_isolator_re.captures(token_str);
-                if let Some(cap) = captures {
-                    let regex_specified = &cap["re"];
+            //let t = templ_clone.to_string();
+            /*let token_iter : Vec<Match> = token_matcher_rege.find_iter(t.as_str()).collect();
+            if verbose {
+                println!("Count of tokens with regex parameter is {}.", token_iter.len());
+            }*/
+            while true {
+                let t = templ_clone.to_string();
+                if let Some(mat) = token_matcher_rege.find(t.as_str()) {
                     if verbose {
-                        println!("Regex specified: {}.", regex_specified);
+                        dbg!(&mat);
                     }
-                    let re_specified_ = Regex::new(regex_specified);
-                    if let Ok(re_specified) = re_specified_ {
-                        let col_captures = re_specified.captures(col);
-                        if let Some(cap) = col_captures {
-                            let match_ = &cap["a"];
-                            templ_clone = first_part_template.to_string() + match_+ &templ_clone[stop..template.len()];
-                            if verbose {
-                                println!("The column slice is '{}'", match_);
-                                println!("The new template looks like: '{}'.", templ_clone.as_str());
-                            }
-                        } else {
-                            templ_clone = templ_clone.replace(mat.as_str(), col);
-                            if verbose {
-                                println!("Did did not capture from the regex, '{}'... so, replaced '{}' with '{}'.", regex_specified, mat.as_str(), col);
-                            }
+                    let start = mat.start();
+                    let stop = mat.end();
+                    /*for r in &replacements {
+                    if (r.start > start && r.start < stop) ||
+                        (r.start < start && r.stop > start)  {
+                        continue;
+                    }
+                }*/
+                    let first_part = templ_clone[0..start].to_string();
+                    let first_part_template = first_part.as_str();
+                    let second_part = templ_clone.as_str()[stop..templ_clone.len()].to_string();
+                    let second_part_templ = second_part.as_str();
+                    let token_str = mat.as_str();
+                    let rege_isolator = "(?:".to_string() + token_replacement.as_str() + "<<regex:)(?P<re>.*?)(?:>>)";
+                    let regex_isolator_re = Regex::new(rege_isolator.as_str()).unwrap();
+                    let captures = regex_isolator_re.captures(token_str);
+                    if let Some(cap) = captures {
+                        let regex_specified = &cap["re"];
+                        if verbose {
+                            println!(r#"Regex specified: "{}"."#, regex_specified);
                         }
-                    }
-                    else {
-                        panic!("Could not compile regex: '{}'", regex_specified);
+                        let re_specified_ = Regex::new(regex_specified);
+                        if let Ok(re_specified) = re_specified_ {
+                            let col_captures = re_specified.captures(col);
+                            if let Some(col_cs) = col_captures {
+                                /*replacements.push(Replacement {
+                                    start: start,
+                                    stop: stop,
+                                    text: matc.as_str().to_string()
+                                });*/
+                                templ_clone = first_part_template.to_string() + &col_cs["a"] + second_part.as_str();
+                                if verbose {
+                                    println!("The column slice is '{}'", &col_cs["a"]);
+                                    println!("The new template looks like: '{}'.", templ_clone.as_str());
+                                }
+                            } else {
+                                /*replacements.push(Replacement {
+                                    start: start,
+                                    stop: stop,
+                                    text: col.to_string()
+                                });*/
+                                templ_clone = first_part_template.to_string() + col + second_part.as_str();
+                                if verbose {
+                                    println!("Did not capture from the regex, '{}'... so this will replace '{}' with '{}'.", regex_specified, mat.as_str(), col);
+                                }
+                            }
+                        } else if let Err(err) = re_specified_ {
+                            panic!("{}", err.to_string());
+                        }
+                    } else {
+                        panic!("Could not find regexp in the <<regex::exp> expression located at char position {}.", start);
                     }
                 } else {
-                    panic!("Could not find regexp in the <<regex::exp> expression located at char position {}.", start);
+                    break;
                 }
             }
         } else if verbose {
             println!("Token did not have a regex qualifier...");
         }
+        //for r in replacements {
+        //    template
+        //}
         templ_clone = templ_clone.replace(token_replacement.as_str(), col);
         templ_clone
     }
+
     // Called by buildre function
     pub fn buildOutputFromEntry(
         entry: String,
